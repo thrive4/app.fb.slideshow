@@ -1,1 +1,9 @@
+update v1.1 27/06/2023
+- improved crossfade fx no longer needs read > save > read
+| or convert to png for alpha layer
+- reworked localization, broader ui scope, utf support and more scalable
+- implemented utilfile.bas generics for several apps
+- implemented cpu syncfps thanks to fxm:
+' via https://www.freebasic.net/forum/viewtopic.php?p=299305&sid=71b9b1edd5e91553b901d064a45ad12c#p299305 by fxm
+
 public release v1.0 20/06/2023

@@ -626,6 +626,11 @@ SDL_RenderClear(renderer)
 SDL_RenderPresent(renderer)
 sdl_delay(400)
 
+' surfaces needed for adding alpha
+' sdl allocates memory per step SDL_SetSurfaceAlphaMod, SDL_ConvertSurfaceFormat
+' using the same surface leads to a memeory leak.... 
+Dim As SDL_Surface Ptr dsurf
+Dim As SDL_Surface Ptr esurf
 
 while running
     datetime = Now()
@@ -681,14 +686,15 @@ while running
         SDL_DestroyTexture(background_surface)
 
         getimage(filename, mp3file, mp3chk, playtype)
-        SDL_DestroyTexture(background_surface)
         background_surface = IMG_LoadTexture(renderer, filename)
 
-        temp_surface       = IMG_Load(dummy)
-        IMG_SavePNG(temp_surface, exepath + "\dummy.png")
-        SDL_FreeSurface(temp_surface)
-        SDL_DestroyTexture(temp_surface)
-        temp_surface       = IMG_LoadTexture(renderer, exepath + "\dummy.png")
+        ' add alpha for crossfade
+        dsurf = IMG_Load(dummy)
+        SDL_SetSurfaceAlphaMod(dsurf, 0)
+        esurf = SDL_ConvertSurfaceFormat(dsurf, SDL_PIXELFORMAT_RGBA32, 0)
+        temp_surface = SDL_CreateTextureFromSurface(renderer, esurf)
+        SDL_FreeSurface(dsurf)
+        SDL_FreeSurface(esurf)
 
         ' scaling image
         SDL_QueryTexture(background_surface, NULL, NULL, @iW, @iH)
