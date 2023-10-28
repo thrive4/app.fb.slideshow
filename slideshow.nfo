@@ -1,3 +1,14 @@
+update v1.2 28/10/2023
+- fixed log creation (missing message)
+- fixed appname made truncation .exe optional
+- fixed checkpath did not set correct path after
+  function exit when path is correct
+- cleanup unused variables, renderText freesurface
+- updated cpu syncfps thanks to fxm
+' via https://www.freebasic.net/forum/viewtopic.php?t=32323
+- misc fixes to getmp3cover
+- reduced probability of same image occuring in shuffle mode
+
 update v1.1 27/06/2023
 - improved crossfade fx no longer needs read > save > read
 | or convert to png for alpha layer
