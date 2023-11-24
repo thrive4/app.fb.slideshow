@@ -101,10 +101,10 @@ dim itm     as string
 dim inikey  as string
 dim inival  as string
 dim inifile as string = exepath + "\conf\" + "conf.ini"
-dim f       as integer
+dim f       as long
 if FileExists(inifile) = false then
     logentry("error", inifile + "file does not excist")
-else 
+else
     f = readfromfile(inifile)
     Do Until EOF(f)
         Line Input #f, itm
@@ -161,12 +161,12 @@ select case command(2)
 end select
 
 select case "locale"
-    case "en", "de", "fr"
+    case "en", "de", "fr", "nl"
         dim itm     as string
         dim inikey  as string
         dim inival  as string
         dim inifile as string = exepath + "\conf\" + locale + "\date.ini"
-        dim f       as integer
+        dim f       as long
         if FileExists(inifile) = false then
             logentry("error", inifile + "file does not excist")
         else 
@@ -262,15 +262,15 @@ if instr(command(1), ".") <> 0 then
     end if
     filename = command(1)
     imagefolder = left(command(1), instrrev(command(1), "\") - 1)
-    chk = createlist(imagefolder, imagetypes, "image")
+    chk = createlist(imagefolder, imagetypes, "slideshow")
 else
     if instr(command(1), ":") <> 0 then
         imagefolder = command(1)
         if checkpath(imagefolder) = false then
             logentry("fatal",  "error: path not found " + imagefolder)
         else
-            chk = createlist(imagefolder, imagetypes, "image")
-            filename = listplay(playtype, "image")
+            chk = createlist(imagefolder, imagetypes, "slideshow")
+            filename = listplay(playtype, "slideshow")
         end if
     ELSE
         if checkpath(imagefolder) = false then
@@ -278,8 +278,8 @@ else
             ' try scanning exe path
             imagefolder = exepath
         end if
-        chk = createlist(imagefolder, imagetypes, "image")
-        filename = listplay(playtype, "image")
+        chk = createlist(imagefolder, imagetypes, "slideshow")
+        filename = listplay(playtype, "slideshow")
         if chk = false then
             dummy = "no displayable files found"
             print dummy    
@@ -307,11 +307,11 @@ end sub
 
 ' get next or previous image
 sub getimage(byref filename as string, byref dummy as string, byref mp3chk as boolean, byval playtype as string)
-    filename = listplay(playtype, "image")
+    filename = listplay(playtype, "slideshow")
     checkmp3cover(filename)
     ' validate if false get next image
     if filename = "" or FileExists(filename) = false then
-        filename = listplay(playtype, "image")
+        filename = listplay(playtype, "slideshow")
         checkmp3cover(filename)
     end if
 end sub
@@ -831,9 +831,9 @@ while running
         ' date
         select case datedisplay
             case "full" 
-                ddatetime = langenday(weekday(datetime)) & ", " & day(now) & " " + langenmonth(month(datetime)) & " " & year(datetime)
+                ddatetime = langenday(weekday(dateserial(year(now),month(now), 1))) & ", " & day(now) & " " + langenmonth(month(datetime)) & " " & year(datetime)
             case "abbreviated"
-                ddatetime = left(langenday(weekday(datetime)), 3) + ", " & day(now) & " " + left(langenmonth(month(datetime)), 3) & " " & year(datetime)
+                ddatetime = left(langenday(weekday(dateserial(year(now),month(now), 1))), 3) + ", " & day(now) & " " + left(langenmonth(month(datetime)), 3) & " " & year(datetime)
             case "os"    
                 ddatetime = format(datetime, dateformat)
         end select
@@ -881,8 +881,9 @@ wend
 
 cleanup:
 ' cleanup listplay files
-delfile(exepath + "\" + "image" + ".tmp")
-delfile(exepath + "\" + "image" + ".lst")
+delfile(exepath + "\" + "slideshow" + ".tmp")
+delfile(exepath + "\" + "slideshow" + ".lst")
+delfile(exepath + "\" + "slideshow" + ".swp")
 delfile(exepath + "\thumb.jpg")
 delfile(exepath + "\thumb.png")
 

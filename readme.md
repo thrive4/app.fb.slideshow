@@ -11,11 +11,27 @@ cover art from a mp3 and display it if present.
 slideshow.exe "path to file or folder"\
 slideshow.exe "path to file or folder" fullscreen\
 if no file or path is specified the current dir will be scanned for an image\
-if the folder has subfolder(s) these will be scanned for images as well
-\
-or specify a path via \conf\conf.ini
-[images]
-' location images
+if the folder has subfolder(s) these will be scanned for images as well\
+or specify a path via \conf\conf.ini\
+## configuration
+' options de, en, fr and nl\
+locale          = en\
+[clock and date display]\
+ttffont       = gisha.ttf\
+fontsizeclock = 58\
+fontsizedate  = 30\
+' options dddd, dd mmm yyyy or dd/mm/yyyy\
+dateformat    = dddd, dd mmm yyyy\
+' options hh:mm, hh:mm:ss AM/PM, hh:mm AM/PM\
+timeformat    = hh:mm\
+' clockposistion options bottomleft, bottomright, topleft, topright\
+clockposistion = bottomleft\
+' language date options os, full, abbreviated\
+' full and abbreviated use date.ini allowing\
+' to override the os language\
+datedisplay = abbreviated\
+[images]\
+' location images\
 imagefolder = g:\data\images\flickr\alpha clock
 ## requirements
 sdl2 (32bit) v2.24.2.0\

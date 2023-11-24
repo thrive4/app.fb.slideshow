@@ -1,3 +1,16 @@
+update v1.3 24/11/2023
+- corrected freefile variable type to long
+  integer causes issues when opening multiple
+  file in succession
+- corrected weekday now attained via dateserial
+  see: https://www.timeanddate.com/calendar/days/first-day-of-the-week.html
+- trimmed utilfile.bas
+- reworked shuffleplay...again... should now
+  work as intended; only play a item in the set once
+  untill the set is exhausted.
+- added dutch (nl) as locale
+- tidy up conf.ini
+
 update v1.2 28/10/2023
 - fixed log creation (missing message)
 - fixed appname made truncation .exe optional
@@ -7,7 +20,7 @@ update v1.2 28/10/2023
 - updated cpu syncfps thanks to fxm
 ' via https://www.freebasic.net/forum/viewtopic.php?t=32323
 - misc fixes to getmp3cover
-- reduced probability of same image occuring in shuffle mode
+- reduced probability of same image occurring in shuffle mode
 
 update v1.1 27/06/2023
 - improved crossfade fx no longer needs read > save > read
