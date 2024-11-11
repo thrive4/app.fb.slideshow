@@ -2,7 +2,7 @@
 ' Translated to FreeBASIC by Michael "h4tt3n" Schmidt Nissen, march 2017
 ' http://www.willusher.io/sdl2%20tutorials/2013/12/18/lesson-6-true-type-fonts-with-sdl_ttf
 ' tweaked for fb and sdl2 june 2023 by thrive4
-' supported image format bmp, gif, jpeg, jpg, lbm, pcx, png, pnm, svg, tga, tiff, tff, webp, xcf, xpm, xv
+' supported formats .bmp, .gif, .gls, .jpg, .jpeg, .mp3, .png, .pcx
 
 #include once "SDL2/SDL.bi"
 #include once "SDL2/SDL_ttf.bi"
@@ -24,6 +24,27 @@ dim desktoph     as integer
 dim desktopr     as integer
 dim rotateimage  as SDL_RendererFlip = SDL_FLIP_NONE
 dim rotateangle  as double = 0
+' surfaces needed for adding alpha
+' sdl allocates memory per step SDL_SetSurfaceAlphaMod, SDL_ConvertSurfaceFormat
+' using the same surface leads to a memeory leak.... 
+Dim As SDL_Surface Ptr dsurf
+Dim As SDL_Surface Ptr esurf
+Dim As Integer imagew, imageh, iW, iH
+
+' scale image
+dim as integer imagex, imagey
+dim as single  scaledw, scaledh 
+dim scale as single
+
+' define area for rendering image
+dim slideshow  as SDL_Rect
+' setup glass aka window
+Dim As SDL_Window Ptr glass
+dim desktopplate as SDL_Rect
+dim pip          as sdl_rect
+
+' get slideshow handle when launched
+dim slideshowapp as hwnd = GetForegroundWindow
 
 'zoomtype options stretch, scaled, zoomsmallimage
 dim zoomtype        as string = "zoomsmallimage"
@@ -66,8 +87,6 @@ fxfadernd(3) = "none"
 
 ' setup clock and date display
 Dim ttffont          as string = exepath + "\" + "gisha.ttf"
-dim shared clockposx as integer
-dim shared clockposy as integer
 dim ttfmessage       as string = "ttfmessage"
 Dim datetime         As Double
 dim dateformat       as string = "dd/mm/yyyy"
@@ -77,6 +96,8 @@ dim clockposistion   as string = "bottomleft"
 ' options default, en, en-abrivated
 'dim locale         as string = "default"
 dim datedisplay      as string = "default"
+dim shared clockposx as integer
+dim shared clockposy as integer
 
 ' force date to other langauage
 dim ddatetime as string
@@ -92,16 +113,29 @@ dim imagenametype as string = "folder"
 dim filename    as string
 dim fileext     as string = ""
 dim imagefolder as string
-dim imagetypes  as string = ".bmp, .gif, .jpg, .mp3, .png, .pcx, .jpeg, .tff" 
+dim imagetypes  as string = ".bmp, .gif, .gls, .jpg, .jpeg, .mp3, .png, .pcx" 
 dim playtype    as string = "shuffle"
 
 ' init app by overwrite by commandline or config file
 'ini overwrite
-dim itm     as string
-dim inikey  as string
-dim inival  as string
 dim inifile as string = exepath + "\conf\" + "conf.ini"
 dim f       as long
+dim as string itm, inikey, inival
+
+' setup the text aka texture and image with sdl
+Dim As SDL_Texture Ptr background_surface
+Dim As SDL_Texture Ptr temp_surface
+Dim As SDL_Texture Ptr texture
+SDL_SetTextureBlendMode(temp_surface, SDL_BLENDMODE_BLEND)
+Dim As SDL_Color ttfcolor = (255, 255, 255, 0)
+Dim As SDL_Color backgrondcolor = (1, 1, 1, 0)
+Dim As SDL_Color ttffontgrey    = (185, 195, 205, 0)
+
+Dim shared As TTF_Font Ptr ttffontdef
+dim ttffontsize     as integer
+Dim shared As TTF_Font Ptr ttffontclock
+Dim shared As TTF_Font Ptr ttffontdate
+
 if FileExists(inifile) = false then
     logentry("error", inifile + "file does not excist")
 else
@@ -147,18 +181,6 @@ else
         end if    
     loop    
 end if    
-
-select case command(2)
-    case "/?", "-man", ""
-        displayhelp(locale)
-    case "fullscreen"
-        screenwidth  = desktopw
-        screenheight = desktoph
-        fullscreen = true
-    case ""
-        ' no switch    
-        'displayhelp
-end select
 
 select case "locale"
     case "en", "de", "fr", "nl"
@@ -244,50 +266,99 @@ select case "locale"
         langenmonth(12) = "december"
 end select
 
-' get images if applicable override first image with preferd a specific image
-'imagefolder = command(1)
-if instr(command(1), ".") <> 0 then
-    fileext = lcase(mid(command(1), instrrev(command(1), ".")))
+' parse commandline
+dummy = resolvepath(command(1))
+select case dummy
+    case "/?", "-h", "-help", "-man"
+        displayhelp(locale)
+        ' cleanup listplay files
+        delfile(exepath + "\" + "slideshow" + ".tmp")
+        delfile(exepath + "\" + "slideshow" + ".lst")
+        delfile(exepath + "\" + "slidewhow" + ".swp")
+        logentry("terminate", "normal termination " + appname)
+    case "-v", "-ver"
+        consoleprint appname + " version " & exeversion 
+        logentry("terminate", "normal termination " + appname)
+end select
+' specfic file
+if instr(dummy, ".") <> 0 and instr(dummy, "..") = 0 and instr(dummy, ".m3u") = 0 then
+    fileext = lcase(mid(dummy, instrrev(dummy, ".")))
     if instr(1, imagetypes, fileext) = 0 then
-        logentry("fatal", command(1) + " file type not supported")
+        logentry("fatal", dummy + " file type not supported")
     end if
-    if FileExists(exepath + "\" + command(1)) = false then
-        if FileExists(imagefolder) then
-            'nop
-        else
-            logentry("fatal", imagefolder + " does not excist or is incorrect")
-        end if
-    else
-        imagefolder = exepath + "\" + command(1)
-    end if
-    filename = command(1)
-    imagefolder = left(command(1), instrrev(command(1), "\") - 1)
+    imagefolder = left(dummy, instrrev(dummy, "\") - 1)
     chk = createlist(imagefolder, imagetypes, "slideshow")
+    currentimage = setcurrentlistitem("slideshow", dummy)
+    'currentimage -= 1
 else
-    if instr(command(1), ":") <> 0 then
-        imagefolder = command(1)
+    ' specific path
+    if instr(dummy, "\") <> 0 and instr(dummy, ".m3u") = 0  then
+        imagefolder = dummy
         if checkpath(imagefolder) = false then
             logentry("fatal",  "error: path not found " + imagefolder)
         else
             chk = createlist(imagefolder, imagetypes, "slideshow")
+            if chk = false then
+                logentry("fatal", "error: no displayable files found")
+            end if
             filename = listplay(playtype, "slideshow")
         end if
     ELSE
+        ' fall back to path imagefolder specified in conf.ini
         if checkpath(imagefolder) = false then
             logentry("warning", "error: path not found " + imagefolder)
             ' try scanning exe path
             imagefolder = exepath
         end if
         chk = createlist(imagefolder, imagetypes, "slideshow")
-        filename = listplay(playtype, "slideshow")
         if chk = false then
-            dummy = "no displayable files found"
-            print dummy    
-            logentry("warning", dummy)
-            running = false
+            logentry("fatal", "error: no displayable files found")
         end if
+        filename = listplay(playtype, "slideshow")
     end if
 end if
+if command(2) = "fullscreen" or command(4) = "fullscreen" then
+    screenwidth  = desktopw
+    screenheight = desktoph
+    fullscreen = true
+end if 
+
+' setup parsing pls and m3u
+dim maxitems        as integer
+
+' use .m3u as slideshow coverart mp3s
+if instr(dummy, ".m3u") <> 0 then
+    if FileExists(dummy) then
+        'nop
+    else
+        logentry("fatal", dummy + " file does not excist or possibly use full path to file")
+    end if
+    maxitems = getmp3playlist(dummy, "slideshow")
+    filename = listplay(playtype, "slideshow")
+    logentry("notice", "parsing and playing playlist " + filename)
+end if
+
+' search with query and export .m3u 
+if instr(dummy, ":") <> 0 and len(command(2)) <> 0 and command(2) <> "fullscreen" then
+    select case command(2)
+        case "artist"
+        case "title"
+        case "album"
+        case "year"
+        case "genre"
+        case else
+            logentry("fatal", "unknown tag '" & command(2) & "' valid tags artist, title, album, genre and year")
+    end select
+    ' scan and search nr results overwritten by getmp3playlist
+    maxitems = exportm3u(dummy, "*.mp3", "m3u", "exif", command(2), command(3))
+    maxitems = getmp3playlist(exepath + "\" + command(3) + ".m3u", "slideshow")
+    filename = listplay(playtype, "slideshow")
+    currentsong = setcurrentlistitem("slideshow", filename)
+    if currentsong = 1 then
+        logentry("fatal", "no matches found for " + command(3) + " in " + command(2))
+    end if
+end if
+dummy = ""
 
 ' check and get mp3 cover art
 sub checkmp3cover(byref filename as string)
@@ -432,96 +503,6 @@ function scaledfit(screenw as integer, screenh as integer,_
     return true
 end function
 
-' setup the text aka texture and image with sdl
-Dim As SDL_Texture Ptr background_surface
-Dim As SDL_Texture Ptr temp_surface
-Dim As SDL_Texture Ptr texture
-SDL_SetTextureBlendMode(temp_surface, SDL_BLENDMODE_BLEND)
-Dim As SDL_Color ttfcolor = (255, 255, 255, 0)
-Dim As SDL_Color backgrondcolor = (1, 1, 1, 0)
-Dim As SDL_Color ttffontgrey    = (185, 195, 205, 0)
-
-' scale image
-dim imagex  as integer
-dim imagey  as integer
-dim scaledw as single
-dim scaledh as single
-dim scale   as single
-Dim         As Integer iW, iH
-
-' define area for rendering image
-dim slideshow  as SDL_Rect
-
-initsdl:
-dim desktopplate as SDL_Rect
-desktopplate.x = 0
-desktopplate.y = 0
-desktopplate.w = screenwidth
-desktopplate.h = screenheight
-
-dim pip as sdl_rect
-pip.x = 100
-pip.y = 100
-pip.w = 100
-pip.h = 100
-
-' init window and render
-SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1")
-' respond to power plan settings blank display on windows set hint before sdl init video
-If (SDL_Init(SDL_INIT_VIDEO) = not NULL) Then
-    SDL_Quit()
-    logentry("fatal", "sdl2 video could not be initlized error: " + *SDL_GetError())
-else
-    ' no audio needed
-    SDL_QuitSubSystem(SDL_INIT_AUDIO)
-    ' render scale quality: 0 point, 1 linear, 2 anisotropic
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1") 
-   ' filter non used events
-    SDL_EventState(SDL_FINGERMOTION,    SDL_IGNORE)
-    SDL_EventState(SDL_MULTIGESTURE,    SDL_IGNORE)
-    SDL_EventState(SDL_DOLLARGESTURE,   SDL_IGNORE)
-End If
-' setup glass aka window
-Dim As SDL_Window Ptr glass
-if fullscreen then
-    SDL_ShowCursor(SDL_DISABLE)
-    glass = SDL_CreateWindow( "imageviewer", null, null, screenwidth, screenheight, SDL_WINDOW_BORDERLESS)
-else
-    SDL_ShowCursor(SDL_ENABLE)
-    glass = SDL_CreateWindow( "imageviewer", 100, 100, screenwidth, screenheight, SDL_WINDOW_RESIZABLE)
-end if
-if (glass = NULL) Then
-	SDL_Quit()
-    logentry("fatal", "abnormal termination sdl2 could not create window")
-EndIf
-Dim As SDL_Renderer Ptr renderer = SDL_CreateRenderer(glass, -1, SDL_RENDERER_ACCELERATED Or SDL_RENDERER_PRESENTVSYNC)
-'SDL_SetWindowOpacity(glass, 0.5)
-if (renderer = NULL) Then	
-	SDL_Quit()
-    logentry("fatal", "abnormal termination sdl2 could not create renderer")
-EndIf
-
-' init SDL_ttf
-if (TTF_Init() = Not 0) Then 
-    SDL_Quit()
-    end 
-EndIf
-
-dim ttffontsize     as integer
-ttffontsize = fix(screenheight / 100 * 3) 
-dim offsetfonty     as integer = fix(ttffontsize / (screenheight / 500))
-dim fontsizeclock   as integer = 10 + ttffontsize
-dim fontsizedate    as integer = fix(0.9 * ttffontsize)
-
-Dim shared As TTF_Font Ptr ttffontdef
-ttffontdef = TTF_OpenFont(ttffont, ttffontsize)
-
-Dim shared As TTF_Font Ptr ttffontclock
-ttffontclock = TTF_OpenFont(ttffont, fontsizeclock)
-
-Dim shared As TTF_Font Ptr ttffontdate
-ttffontdate = TTF_OpenFont(ttffont, fontsizedate)
-
 Sub renderTexture(  ByVal tex As SDL_Texture Ptr, _
 	                ByVal ren As SDL_Renderer Ptr, _ 
 	                Byval x   As Integer, _
@@ -581,44 +562,77 @@ function closesdlfonts() as boolean
     return true
 end function
 
-' Get the texture w/h so we can center it in the screen
-Dim As Integer imagew, imageh
-SDL_QueryTexture(texture, NULL, NULL, @imagew, @imageh )
-Dim As integer posx = (screenwidth / 2 - imagew / 2)
-Dim As integer posy = (screenheight / 2 - imageh / 2)
+' toggle main loop to opengl shader if .gls file
+#include once "shadertoy.bas"
+dim glrunning as boolean = false
+if instr(1, filename, ".gls") > 0 then
+    glrunning = true
+    glfullscreen = true
+    shader.CompileFile(filename)
+else
+    SDL_GL_DeleteContext(glContext)
+    SDL_DestroyWindow(glglass)
+end if
 
-' work aorund to init first image
-getimage(filename, mp3file, mp3chk, playtype)
-slideshow.x = 0
-slideshow.y = 0
-slideshow.w = 1.2 * screenwidth
-slideshow.h = 1.2 * screenheight
-pip.x = slideshow.x
-pip.y = slideshow.y
-pip.w = slideshow.w
-pip.h = slideshow.h
+' init window and render
+SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1")
+' respond to power plan settings blank display on windows set hint before sdl init video
+If (SDL_Init(SDL_INIT_VIDEO) = not NULL) Then
+    SDL_Quit()
+    logentry("fatal", "sdl2 video could not be initlized error: " + *SDL_GetError())
+else
+    ' disable specific subsytems sdl
+    SDL_QuitSubSystem(SDL_INIT_AUDIO)
+    SDL_QuitSubSystem(SDL_INIT_HAPTIC)
+    ' filter non used events
+    SDL_EventState(SDL_FINGERMOTION,    SDL_IGNORE)
+    SDL_EventState(SDL_FINGERDOWN,      SDL_IGNORE)
+    SDL_EventState(SDL_FINGERUP,        SDL_IGNORE)
+    SDL_EventState(SDL_MULTIGESTURE,    SDL_IGNORE)
+    SDL_EventState(SDL_DOLLARGESTURE,   SDL_IGNORE)
+    SDL_EventState(SDL_JOYBALLMOTION,   SDL_IGNORE)
+    SDL_EventState(SDL_DROPFILE,        SDL_IGNORE)
+    ' render scale quality: 0 point, 1 linear, 2 anisotropic
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1") 
+End If
+' init SDL_ttf
+if (TTF_Init() = Not 0) Then 
+    SDL_Quit()
+    end 
+EndIf
 
-' tricky todo check this used to show first image without delay in slideshow
-inittime = SDL_GetTicks() - interval
-' todo check placement screen
-select case clockposistion
-    case "bottomleft" 
-        ' display clock in bottom corner left
-        clockposx = 30
-        clockposy = screenheight - fontsizeclock * 3.5f
-    case "bottomright" 
-        ' display clock in bottom corner right
-        clockposx = screenwidth  - fontsizeclock * 6.0f
-        clockposy = screenheight - fontsizeclock * 3.5f
-    case "topleft" 
-        ' display clock in top corner left
-        clockposx = fontsizeclock
-        clockposy = fontsizeclock
-    case "topright" 
-        ' display clock in top corner right
-        clockposx = screenwidth  - fontsizeclock * 6.0f
-        clockposy = fontsizeclock
-end select
+initsdl:
+desktopplate.x = 0
+desktopplate.y = 0
+desktopplate.w = screenwidth
+desktopplate.h = screenheight
+
+' rescale fonts to screensize
+ttffontsize = fix(screenheight / 100 * 3) 
+dim offsetfonty     as integer = fix(ttffontsize / (screenheight / 500))
+dim fontsizeclock   as integer = 10 + ttffontsize
+dim fontsizedate    as integer = fix(0.9 * ttffontsize)
+ttffontdef   = TTF_OpenFont(ttffont, ttffontsize)
+ttffontclock = TTF_OpenFont(ttffont, fontsizeclock)
+ttffontdate  = TTF_OpenFont(ttffont, fontsizedate)
+
+if fullscreen then
+    SDL_ShowCursor(SDL_DISABLE)
+    glass = SDL_CreateWindow( "imageviewer", null, null, screenwidth, screenheight, SDL_WINDOW_BORDERLESS)
+else
+    SDL_ShowCursor(SDL_ENABLE)
+    glass = SDL_CreateWindow( "imageviewer", 100, 100, screenwidth, screenheight, SDL_WINDOW_RESIZABLE)
+end if
+if (glass = NULL) Then
+	SDL_Quit()
+    logentry("fatal", "abnormal termination sdl2 could not create window")
+EndIf
+Dim As SDL_Renderer Ptr renderer = SDL_CreateRenderer(glass, -1, SDL_RENDERER_ACCELERATED Or SDL_RENDERER_PRESENTVSYNC)
+'SDL_SetWindowOpacity(glass, 0.5)
+if (renderer = NULL) Then	
+	SDL_Quit()
+    logentry("fatal", "abnormal termination sdl2 could not create renderer")
+EndIf
 
 ' background on launch
 SDL_RenderClear(renderer)
@@ -632,12 +646,130 @@ SDL_RenderClear(renderer)
 SDL_RenderPresent(renderer)
 sdl_delay(400)
 
-' surfaces needed for adding alpha
-' sdl allocates memory per step SDL_SetSurfaceAlphaMod, SDL_ConvertSurfaceFormat
-' using the same surface leads to a memeory leak.... 
-Dim As SDL_Surface Ptr dsurf
-Dim As SDL_Surface Ptr esurf
+' main shadertoy sdl
+While glrunning
 
+    ' make sure gl window is on top
+    SDL_RaiseWindow(glglass)
+
+    While SDL_PollEvent(@event)
+        select case event.type
+            case SDL_KEYDOWN and event.key.keysym.sym = SDLK_ESCAPE
+                SDL_GL_DeleteContext(glContext)
+                SDL_DestroyWindow(glglass)
+                glrunning = False
+                running = false
+            case SDL_WINDOWEVENT and event.window.event = SDL_WINDOWEVENT_CLOSE
+                SDL_GL_DeleteContext(glContext)
+                SDL_DestroyWindow(glglass)
+                glrunning = False
+                running = false
+            case SDL_WINDOWEVENT and event.window.event = SDL_WINDOWEVENT_MINIMIZED
+                SDL_HideWindow(glglass)
+            case SDL_WINDOWEVENT and event.window.event = SDL_WINDOWEVENT_RESTORED
+                SDL_ShowWindow(glglass)
+            ' keep gl window in place relative to regular sdl window
+            case SDL_WINDOWEVENT and event.window.event = SDL_WINDOWEVENT_MOVED
+                SDL_GetWindowPosition(glass, @w2, @h2)
+                sdl_setwindowposition(glglass, w2, h2)
+            case SDL_WINDOWEVENT and event.window.event = SDL_WINDOWEVENT_RESIZED
+                SDL_GetWindowPosition(glass, @w2, @h2)
+                sdl_setwindowposition(glglass, w2, h2)
+            case SDL_KEYDOWN and event.key.keysym.sym = SDLK_F11
+                SDL_GL_DeleteContext(glContext)
+                SDL_DestroyRenderer(renderer)
+                SDL_DestroyWindow(glass)
+                SDL_DestroyWindow(glglass)
+                select case fullscreen
+                    case true
+                        ' enable or disable mouse cursor in window
+                        screenwidth  = 1280
+                        screenheight = 720
+                        fullscreen = false
+                        goto initgl
+                    case false
+                        screenwidth  = desktopw
+                        screenheight = desktoph
+                        fullscreen = true
+                        sdl_setwindowposition(glglass, 0, 0)
+                        goto initgl
+                end select
+        end select
+    Wend
+
+    ' timer
+    currenttime = SDL_GetTicks()
+    if (currenttime > inittime + interval * 3) then
+        filename = listplay(playtype, "slideshow")
+        ' todo needs better handeling funky behaivour
+        if shader.CompileFile(filename) = false then
+            print "error compiling " & filename
+        end if
+        inittime = currenttime
+    end if
+
+    ' bind the texture and draw the shader
+    glBindTexture(GL_TEXTURE_2D, gltexture)
+    ' enable shader
+    glUseProgram(Shader.ProgramObject)
+
+    ' get uniforms locations in shader program
+    var iGlobalTime = glGetUniformLocation(Shader.ProgramObject,"iGlobalTime")
+    var iTime       = glGetUniformLocation(Shader.ProgramObject,"iTime")
+    var iResolution = glGetUniformLocation(Shader.ProgramObject,"iResolution")
+    var iMouse      = glGetUniformLocation(Shader.ProgramObject,"iMouse")
+    var iDate       = glGetUniformLocation(Shader.ProgramObject,"iDate")
+    glUniform3f(iResolution, v3.x, v3.y, v3.z)
+    glUniform4f(idate, year(now), month(now), day(now), (hour(now) * 60 * 60) + (minute(now) * 60) + second(now) + (epoch - fix(epoch)))
+    glUniform1f(iGlobalTime, tNow - tStart)
+    glUniform1f(iTime, tNow - tStart)
+    glClear (GL_COLOR_BUFFER_BIT or GL_DEPTH_BUFFER_BIT or GL_STENCIL_BUFFER_BIT)
+    glRectf (-1.0, -1.0, 1.0, 1.0)
+    'flip 1,0
+
+    ' Update the screen
+    SDL_GL_SwapWindow(glglass)
+    tStart = Timer()
+    tLast  = tStart
+
+    SDL_SetWindowTitle(glass, "shadertoy sdl2 file: " & filename)
+    ' reduce cpu usage affects shader animation
+    ' use sdl_delay to keep cpu usage low around 80 for ~10%
+    fpscurrent = syncfps(fps)
+    ' todo phase out funky trick to achieve desired animation duration
+    sleep fpscurrent * 0.35f
+Wend
+
+' work around to init first image regular sdl
+if glrunning = false then
+    getimage(filename, mp3file, mp3chk, playtype)
+    SDL_DestroyTexture(background_surface)
+    background_surface = IMG_LoadTexture(renderer, filename)
+
+    ' tricky todo check this used to show first image without delay in slideshow
+    inittime = SDL_GetTicks() - interval
+    ' todo check placement screen
+    select case clockposistion
+        case "bottomleft" 
+            ' display clock in bottom corner left
+            clockposx = 30
+            clockposy = screenheight - fontsizeclock * 3.5f
+        case "bottomright" 
+            ' display clock in bottom corner right
+            clockposx = screenwidth  - fontsizeclock * 6.0f
+            clockposy = screenheight - fontsizeclock * 3.5f
+        case "topleft" 
+            ' display clock in top corner left
+            clockposx = fontsizeclock
+            clockposy = fontsizeclock
+        case "topright" 
+            ' display clock in top corner right
+            clockposx = screenwidth  - fontsizeclock * 6.0f
+            clockposy = fontsizeclock
+    end select
+end if ' end glrunning false
+
+' main regular sdl
 while running
     datetime = Now()
 
@@ -655,7 +787,6 @@ while running
                 closesdlfonts()
                 select case fullscreen
                     case true
-                        ' enable or disable mouse cursor in window
                         screenwidth  = 1280
                         screenheight = 720
                         fullscreen = false
@@ -672,12 +803,6 @@ while running
         end select
     wend
 
-    ' if image can not be loaded skip to next file
-    if background_surface = null then
-        getimage(filename, mp3file, mp3chk, playtype)
-        dummy = filename
-    end if
-
     ' timer
     currenttime = SDL_GetTicks()
     if (currenttime > inittime + interval) then
@@ -693,6 +818,11 @@ while running
 
         getimage(filename, mp3file, mp3chk, playtype)
         background_surface = IMG_LoadTexture(renderer, filename)
+        ' if image can not be loaded skip to next file
+        if background_surface = null then
+            getimage(filename, mp3file, mp3chk, playtype)
+            dummy = filename
+        end if
 
         ' add alpha for crossfade
         dsurf = IMG_Load(dummy)
@@ -701,6 +831,10 @@ while running
         temp_surface = SDL_CreateTextureFromSurface(renderer, esurf)
         SDL_FreeSurface(dsurf)
         SDL_FreeSurface(esurf)
+
+        ' init effects
+        fade = 1
+        fxinittime = currenttime
 
         ' scaling image
         SDL_QueryTexture(background_surface, NULL, NULL, @iW, @iH)
@@ -714,8 +848,6 @@ while running
             ' setup ken burns fx
             case "zoomsmallimage"
                 scale = resizebyaspectratio(screenwidth, screenheight, iW, iH)
-                ' init effects
-                fade = 1
                 randomize
                 effectzoom = fxzoomrnd(int(rnd * 3) + 1)
                 effectfade = fxfadernd(int(rnd * 3) + 1)
@@ -780,7 +912,7 @@ while running
                 slideshow.x = slideshow.x - fadetime * (iW / iH)
                 slideshow.y = slideshow.y - fadetime
             case "none"
-                'nop    
+                'nop 
         end select
         select case effectpan
             case "left2right"
@@ -813,7 +945,6 @@ while running
         end if    
         fxinittime = currenttime
     end if
-
     ' note the ttf texture create a small memory leak mitigated by destroying the background surface
     SDL_RenderClear(renderer)
         ' image

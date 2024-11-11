@@ -1,3 +1,10 @@
+dim shared currentimage  as integer
+dim shared currentsong   as integer
+dim shared currentshader as integer
+' video shuffle is handeld by mpv
+dim shared currentvideo  as integer
+common shared currentitem as integer
+
 ' based on recursive dir code of coderjeff https://www.freebasic.net/forum/viewtopic.php?t=5758
 function createlist(folder as string, filterext as string, listname as string) as integer
     ' setup filelist
@@ -90,17 +97,12 @@ function setcurrentlistitem(listname as string, filename as string) as integer
     return itemnr
 end function
 
-dim shared currentimage  as integer
-dim shared currentsong   as integer
-dim shared currentshader as integer
-' video shuffle is handeld by mpv
-dim shared currentvideo  as integer
 function listplay (playtype as string, listname as string) as string
 
     ' setup item file and item count
     dim chk         as boolean
     Dim listitem    as string
-    Dim currentitem as integer
+    'Dim currentitem as integer
     dim itemnr      as integer = 1
     dim maxitems    as integer = 0
     dim baseitem    as integer
