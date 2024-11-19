@@ -209,9 +209,3 @@ glProc(glUniform3f)
 glProc(glUniform4f)
 glProc(glUniform1i)
 #undef glProc
-
-' Create a texture to render the shader to
-Dim As GLuint gltexture
-glGenTextures(1, @gltexture)
-glBindTexture(GL_TEXTURE_2D, gltexture)
-glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, screenwidth, screenheight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL)

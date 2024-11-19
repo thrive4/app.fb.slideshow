@@ -13,7 +13,7 @@
 
 ' setup screen and sdl
 dim event        as SDL_Event
-dim running      as boolean = True
+dim running      as boolean = true
 dim screenwidth  As integer = 1280
 dim screenheight As integer = 720
 dim fullscreen   as boolean = false
@@ -63,6 +63,7 @@ dim interval    as integer = fps * 100 '3000
 dim currenttime as integer
 ' setup timer used by effects
 dim fxinittime  as integer = 0
+dim menurefresh as integer = 25000
 
 ' effects
 dim fade        as integer = 1
@@ -93,16 +94,18 @@ dim dateformat       as string = "dd/mm/yyyy"
 dim timeformat       as string = "hh:mm:ss"
 ' clockposistion options bottomleft, bottomright, topleft, topright 
 dim clockposistion   as string = "bottomleft"
+dim locale           as string = "en"
 ' options default, en, en-abrivated
-'dim locale         as string = "default"
 dim datedisplay      as string = "default"
 dim shared clockposx as integer
 dim shared clockposy as integer
 
 ' force date to other langauage
 dim ddatetime as string
-dim langenday(1 to 7) as string
+dim langenday(0 to 6) as string
 dim langenmonth(1 to 12) as string
+dim fd as SYSTEMTIME
+GetLocalTime(@fd)
 
 ' setup display filename
 dim imagename as string
@@ -176,13 +179,37 @@ else
                     playtype = inival
                 case "logtype"
                     logtype = inival
+                case "usecons"
+                    usecons = inival
             end select
             'print inikey + " - " + inival
         end if    
     loop    
 end if    
 
-select case "locale"
+' set locale default
+langenday(0) = "sunday"
+langenday(1) = "monday"
+langenday(2) = "tuesday"
+langenday(3) = "wensday"
+langenday(4) = "thurseday"
+langenday(5) = "friday"
+langenday(6) = "saturday"
+
+langenmonth(1)  = "january"
+langenmonth(2)  = "february"
+langenmonth(3)  = "march"
+langenmonth(4)  = "april"
+langenmonth(5)  = "may"
+langenmonth(6)  = "june"
+langenmonth(7)  = "july"
+langenmonth(8)  = "august"
+langenmonth(9)  = "september"
+langenmonth(10) = "oktober"
+langenmonth(11) = "november"
+langenmonth(12) = "december"
+
+select case locale
     case "en", "de", "fr", "nl"
         dim itm     as string
         dim inikey  as string
@@ -190,7 +217,7 @@ select case "locale"
         dim inifile as string = exepath + "\conf\" + locale + "\date.ini"
         dim f       as long
         if FileExists(inifile) = false then
-            logentry("error", inifile + "file does not excist")
+            logentry("error", inifile + " file does not excist")
         else 
             f = readfromfile(inifile)
             Do Until EOF(f)
@@ -224,6 +251,8 @@ select case "locale"
                         case "m12"
                             langenmonth(12) = inival
 
+                        case "d0"
+                            langenday(0) = inival
                         case "d1"
                             langenday(1) = inival
                         case "d2"
@@ -236,51 +265,25 @@ select case "locale"
                             langenday(5) = inival
                         case "d6"
                             langenday(6) = inival
-                        case "d7"
-                            langenday(7) = inival
                     end select
                 end if    
             loop    
         end if    
-
     case else
-        langenday(1) = "sunday"
-        langenday(2) = "monday"
-        langenday(3) = "tuesday"
-        langenday(4) = "wensday"
-        langenday(5) = "thurseday"
-        langenday(6) = "friday"
-        langenday(7) = "saturday"
-
-        langenmonth(1)  = "january"
-        langenmonth(2)  = "february"
-        langenmonth(3)  = "march"
-        langenmonth(4)  = "april"
-        langenmonth(5)  = "may"
-        langenmonth(6)  = "june"
-        langenmonth(7)  = "july"
-        langenmonth(8)  = "august"
-        langenmonth(9)  = "september"
-        langenmonth(10) = "oktober"
-        langenmonth(11) = "november"
-        langenmonth(12) = "december"
+        logentry("error", "unsupported locale " + locale + " applying default setting")
 end select
 
 ' parse commandline
-dummy = resolvepath(command(1))
-select case dummy
+select case command(1)
     case "/?", "-h", "-help", "-man"
         displayhelp(locale)
-        ' cleanup listplay files
-        delfile(exepath + "\" + "slideshow" + ".tmp")
-        delfile(exepath + "\" + "slideshow" + ".lst")
-        delfile(exepath + "\" + "slidewhow" + ".swp")
-        logentry("terminate", "normal termination " + appname)
+        goto cleanup
     case "-v", "-ver"
         consoleprint appname + " version " & exeversion 
-        logentry("terminate", "normal termination " + appname)
+        goto cleanup
 end select
-' specfic file
+
+dummy = resolvepath(command(1))
 if instr(dummy, ".") <> 0 and instr(dummy, "..") = 0 and instr(dummy, ".m3u") = 0 then
     fileext = lcase(mid(dummy, instrrev(dummy, ".")))
     if instr(1, imagetypes, fileext) = 0 then
@@ -347,6 +350,9 @@ if instr(dummy, ":") <> 0 and len(command(2)) <> 0 and command(2) <> "fullscreen
         case "year"
         case "genre"
         case else
+            delfile(exepath + "\" + "slideshow" + ".tmp")
+            delfile(exepath + "\" + "slideshow" + ".lst")
+            delfile(exepath + "\" + "slideshow" + ".swp")
             logentry("fatal", "unknown tag '" & command(2) & "' valid tags artist, title, album, genre and year")
     end select
     ' scan and search nr results overwritten by getmp3playlist
@@ -566,7 +572,8 @@ end function
 #include once "shadertoy.bas"
 dim glrunning as boolean = false
 if instr(1, filename, ".gls") > 0 then
-    glrunning = true
+    running      = false
+    glrunning    = true
     glfullscreen = true
     shader.CompileFile(filename)
 else
@@ -663,7 +670,7 @@ While glrunning
                 SDL_GL_DeleteContext(glContext)
                 SDL_DestroyWindow(glglass)
                 glrunning = False
-                running = false
+                running   = false
             case SDL_WINDOWEVENT and event.window.event = SDL_WINDOWEVENT_MINIMIZED
                 SDL_HideWindow(glglass)
             case SDL_WINDOWEVENT and event.window.event = SDL_WINDOWEVENT_RESTORED
@@ -708,8 +715,6 @@ While glrunning
         inittime = currenttime
     end if
 
-    ' bind the texture and draw the shader
-    glBindTexture(GL_TEXTURE_2D, gltexture)
     ' enable shader
     glUseProgram(Shader.ProgramObject)
 
@@ -725,7 +730,6 @@ While glrunning
     glUniform1f(iTime, tNow - tStart)
     glClear (GL_COLOR_BUFFER_BIT or GL_DEPTH_BUFFER_BIT or GL_STENCIL_BUFFER_BIT)
     glRectf (-1.0, -1.0, 1.0, 1.0)
-    'flip 1,0
 
     ' Update the screen
     SDL_GL_SwapWindow(glglass)
@@ -945,7 +949,7 @@ while running
         end if    
         fxinittime = currenttime
     end if
-    ' note the ttf texture create a small memory leak mitigated by destroying the background surface
+
     SDL_RenderClear(renderer)
         ' image
         SDL_RenderCopyEx(renderer, background_surface, null, @slideshow, rotateangle, null, rotateimage)
@@ -962,9 +966,10 @@ while running
         ' date
         select case datedisplay
             case "full" 
-                ddatetime = langenday(weekday(dateserial(year(now),month(now), 1))) & ", " & day(now) & " " + langenmonth(month(datetime)) & " " & year(datetime)
+                ddatetime = langenday(fd.wDayOfWeek) & ", " & day(now) & " " + langenmonth(month(datetime)) & " " & year(datetime)
             case "abbreviated"
-                ddatetime = left(langenday(weekday(dateserial(year(now),month(now), 1))), 3) + ", " & day(now) & " " + left(langenmonth(month(datetime)), 3) & " " & year(datetime)
+                ddatetime = left(langenday(fd.wDayOfWeek), 3) + ", " & day(now) & " " + left(langenmonth(month(datetime)), 3) & " " & year(datetime)
+                'ddatetime = left(langenday(weekday(dateserial(year(now),month(now), 1), 0)), 3) + ", " & day(now) & " " + left(langenmonth(month(datetime)), 3) & " " & year(datetime)
             case "os"    
                 ddatetime = format(datetime, dateformat)
         end select
@@ -1010,15 +1015,7 @@ while running
 
 wend
 
-cleanup:
-' cleanup listplay files
-delfile(exepath + "\" + "slideshow" + ".tmp")
-delfile(exepath + "\" + "slideshow" + ".lst")
-delfile(exepath + "\" + "slideshow" + ".swp")
-delfile(exepath + "\thumb.jpg")
-delfile(exepath + "\thumb.png")
-
-' cleanup and terminate
+'cleanup sdl
 SDL_DestroyTexture(texture)
 SDL_DestroyTexture(background_surface)
 SDL_DestroyRenderer(renderer)
@@ -1027,5 +1024,13 @@ TTF_Quit()
 SDL_Quit()
 IMG_Quit()
 close
+
+cleanup:
+' cleanup listplay files
+delfile(exepath + "\" + "slideshow" + ".tmp")
+delfile(exepath + "\" + "slideshow" + ".lst")
+delfile(exepath + "\" + "slideshow" + ".swp")
+delfile(exepath + "\thumb.jpg")
+delfile(exepath + "\thumb.png")
 
 logentry("terminate", "normal termination " + appname)

@@ -34,8 +34,6 @@ esc                                 : close application
 locale          = en\
 [clock and date display]\
 ttffont       = gisha.ttf\
-fontsizeclock = 58\
-fontsizedate  = 30\
 ' options dddd, dd mmm yyyy or dd/mm/yyyy\
 dateformat    = dddd, dd mmm yyyy\
 ' options hh:mm, hh:mm:ss AM/PM, hh:mm AM/PM\

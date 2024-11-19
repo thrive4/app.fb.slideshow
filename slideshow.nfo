@@ -1,3 +1,13 @@
+update v1.5 19/11/2024
+- fix resolvepath handling of ..\<path>\<file>
+- fix get day of the weeek switched to GetLocalTime > wDayOfWeek
+- fix to commandline handeling resolvepath after switches -v, etc
+- fixed error handeling locale
+- regression checkpath (see 1.2) fixed again
+- removed gltexture not needed for shader
+- cleanup conf.ini removed unused settings
+- slimmed down function explode
+
 update v1.4 11/11/2024
 - added support for webgl shaders using extension .gls
 - added generate m3u by searching on one tag
@@ -7,18 +17,18 @@ update v1.4 11/11/2024
   generates the m3u file beethoven.m3u
   which then can be played by slideshow.exe beethoven.m3u
   notes:
-  * simple search so 195 is equivelant of ?195? or *195*
+  * simple search so 195 is equivalent of ?195? or *195*
   * runtime in seconds is not calculated default is #EXTINF:134
   * no explicit wildcard support
 - trimmed utilfile.bas and added resolvepath for commanline argument
-- rewrite commandline handeling
+- rewrite commandline handling
 - fixed intermittent issue with displaying first image
 - tweaked getmp3tag increase speed parsing mp3 tags
 - update sdl2 from 2.26.5.0 to 2.30.9.0
 - update sdl_image from 2.6.3.0 to 2.8.2.0
 - update sdl_ttf from 2.20.2.0 to 2.22.0.0
-- remove .tff should be .tif or .tiff but needs seperate libtiff-5.dll
-- avif, tiff, webp and jxl need seperate dll's
+- remove .tff should be .tif or .tiff but needs separate libtiff-5.dll
+- avif, tiff, webp and jxl need separate dll's
 - for now remove support but keep jxl on the todo list
 - info .webp support see: https://en.wikipedia.org/wiki/WebP
 - info .jxl support aka jpeg XL see: https://jpegxl.info/

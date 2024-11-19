@@ -1,9 +1,10 @@
 ' used for app launcher
 #include once "crt/process.bi"
-
 ' dir function and provides constants to use for the attrib_mask parameter
 #include once "vbcompat.bi"
 #include once "dir.bi"
+' for printf
+#include once "crt/stdio.bi"
 
 ' disable filename globbing otherwise g:\* list files
 ' when using command how ever conflicts with dir()
@@ -67,11 +68,15 @@ function consoleprint(msg as string, forcewstr as boolean = false) as boolean
 
     if AttachConsole(ATTACH_PARENT_PROCESS) THEN ' gui mode
         Shell("Cls")
+		freopen( "CON", "r", stdin )
+		freopen( "CON", "w", stdout )
+		freopen( "CON", "w", stderr )
         ' sigh work around msg = wstr(msg) does not work ....
+        ' also todo figure out printf with wstr
         if forcewstr then
             print wstr(msg)
         else
-            print msg
+            printf(msg)
         end if
         ' restore the normal prompt in cmd console
         freeconsole()
@@ -102,7 +107,7 @@ Function logentry(entrytype As String, logmsg As String) As Boolean
 
     ' output to console
     if usecons = "true" then
-        print time & " " + entrytype + " | " + logmsg
+        consoleprint time & " " + entrytype + " | " + logmsg
     end if
 
     ' setup logfile
@@ -302,34 +307,32 @@ Function checkpath(chkpath As String) As boolean
         return false
     end if
 
+    chdir(dummy)
     return true
 
 End Function
 
 ' resolve path commandline argument
 Function resolvepath(path As String) As String
-    Dim buffer        As String * 260
+
+    Dim buffer        as String * 260
     dim resolvedpath  as string
-    Dim length        As Integer = GetFullPathName(path, 260, buffer, Null)
+    Dim length        as Integer 
+    length = GetFullPathName(path, 260, buffer, Null)
 
     resolvedpath = Left(buffer, length)
-    ' check for valid path
-    if checkpath(resolvedpath) = false then
-        ' file in same dir as .exe
-        if instr(path, ".") > 0 and instr(path, "..") = 0 and instr(path, ":") = 0 then
-            resolvedpath = curdir + "\" + path
-        else
-            resolvedpath = path
-        end if
-    End If
+    if checkpath(resolvedpath) = false and instr(path, "..") = 0 then
+        resolvedpath = path
+    end if  
+
     return resolvedpath
+
 end function
 
 ' localization file functions
 ' ______________________________________________________________________________'
 
 ' localization can be applied by getting a locale or other method
-dim locale as string = "en"
 sub displayhelp(locale as string)
     dim item  as string
     dim dummy as string
@@ -347,7 +350,6 @@ sub displayhelp(locale as string)
     Do Until EOF(f)
         Line Input #f, item
         dummy = dummy + item + chr$(13) + chr$(10)
-        'print wstr(dummy)
     Loop
     close(f)
     consoleprint (dummy, true)
@@ -820,17 +822,15 @@ end function
 ' split or explode by delimiter return elements in array
 ' based on https://www.freebasic.net/forum/viewtopic.php?t=31691 code by grindstone
 Function explode(haystack As String = "", delimiter as string, ordinance() As String) As UInteger
-    Dim As String text = haystack  'remind explode as working copy
     Dim As UInteger b = 1, e = 1   'pointer to text, begin and end
     Dim As UInteger x              'counter
-    ReDim ordinance(0)             'reset array
 
     Do Until e = 0
       x += 1
-      ReDim Preserve ordinance(x)         'create new array element
-      e = InStr(e + 1, text, delimiter)   'set end pointer to next space
-      ordinance(x) = Mid(text, b, e - b)  'cut text between the pointers and write it to the array
-      b = e + 1                           'set begin pointer behind end pointer for the next word
+      ReDim Preserve ordinance(x)             'create new array element
+      e = InStr(e + 1, haystack, delimiter)   'set end pointer to next space
+      ordinance(x) = Mid(haystack, b, e - b)  'cut text between the pointers and write it to the array
+      b = e + 1                               'set begin pointer behind end pointer for the next word
     Loop
 
     Return x 'nr of elements returned
