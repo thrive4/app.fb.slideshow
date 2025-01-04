@@ -1,3 +1,7 @@
+update 1.6 04/01/2025
+- fixed reversed animations opengl was timing issue
+- improved locale handeling
+
 update v1.5 19/11/2024
 - fix resolvepath handling of ..\<path>\<file>
 - fix get day of the weeek switched to GetLocalTime > wDayOfWeek

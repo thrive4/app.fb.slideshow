@@ -6,12 +6,6 @@
 ' for printf
 #include once "crt/stdio.bi"
 
-' disable filename globbing otherwise g:\* list files
-' when using command how ever conflicts with dir()
-' also odd this is used for 64bits but works with 32bits
-' Extern _dowildcard Alias "_dowildcard" As Long
-'Dim Shared _dowildcard As Long = 0
-
 ' setup log
 dim shared logfile    as string
 dim shared logtype    as string
@@ -233,24 +227,6 @@ Function newfile(filename As String) As boolean
 
 End Function
 
-' create a temp file
-Function tmp2file(filename As String) As boolean
-    Dim f As long
-
-    if FileExists(filename) = true then
-      If Kill(filename) <> 0 Then
-          logentry("warning", "could not delete " + filename )
-      end if
-    end if
-
-    f = FreeFile
-    Open filename For output As #f
-    logentry("notice", filename + " created")
-    close(f)
-    return true
-
-End Function
-
 ' append to an excisiting file
 Function appendfile(filename As String, msg as string) As boolean
     Dim f As long
@@ -340,12 +316,6 @@ sub displayhelp(locale as string)
     f = freefile
 
     ' get text
-    if FileExists(exepath + "\conf\" + locale + "\help.ini") then
-        'nop
-    else
-        logentry("error", "open " + exepath + "\conf\" + locale + "\help.ini" + " file does not excist")
-        locale = "en"
-    end if
     Open exepath + "\conf\" + locale + "\help.ini" For input As #f
     Do Until EOF(f)
         Line Input #f, item

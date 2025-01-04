@@ -187,91 +187,71 @@ else
     loop    
 end if    
 
-' set locale default
-langenday(0) = "sunday"
-langenday(1) = "monday"
-langenday(2) = "tuesday"
-langenday(3) = "wensday"
-langenday(4) = "thurseday"
-langenday(5) = "friday"
-langenday(6) = "saturday"
-
-langenmonth(1)  = "january"
-langenmonth(2)  = "february"
-langenmonth(3)  = "march"
-langenmonth(4)  = "april"
-langenmonth(5)  = "may"
-langenmonth(6)  = "june"
-langenmonth(7)  = "july"
-langenmonth(8)  = "august"
-langenmonth(9)  = "september"
-langenmonth(10) = "oktober"
-langenmonth(11) = "november"
-langenmonth(12) = "december"
-
+' verify locale otherwise set default
 select case locale
     case "en", "de", "fr", "nl"
-        dim itm     as string
-        dim inikey  as string
-        dim inival  as string
-        dim inifile as string = exepath + "\conf\" + locale + "\date.ini"
-        dim f       as long
-        if FileExists(inifile) = false then
-            logentry("error", inifile + " file does not excist")
-        else 
-            f = readfromfile(inifile)
-            Do Until EOF(f)
-                Line Input #f, itm
-                if instr(1, itm, "=") > 1 then
-                    inikey = trim(mid(itm, 1, instr(1, itm, "=") - 2))
-                    inival = trim(mid(itm, instr(1, itm, "=") + 2, len(itm)))
-                    select case inikey
-                        case "m1"
-                            langenmonth(1) = inival
-                        case "m2"
-                            langenmonth(2) = inival
-                        case "m3"
-                            langenmonth(3) = inival
-                        case "m4"
-                            langenmonth(4) = inival
-                        case "m5"
-                            langenmonth(5) = inival
-                        case "m6"
-                            langenmonth(6) = inival
-                        case "m7"
-                            langenmonth(7) = inival
-                        case "m8"
-                            langenmonth(8) = inival
-                        case "m9"
-                            langenmonth(9) = inival
-                        case "m10"
-                            langenmonth(10) = inival
-                        case "m11"
-                            langenmonth(11) = inival
-                        case "m12"
-                            langenmonth(12) = inival
-
-                        case "d0"
-                            langenday(0) = inival
-                        case "d1"
-                            langenday(1) = inival
-                        case "d2"
-                            langenday(2) = inival
-                        case "d3"
-                            langenday(3) = inival
-                        case "d4"
-                            langenday(4) = inival
-                        case "d5"
-                            langenday(5) = inival
-                        case "d6"
-                            langenday(6) = inival
-                    end select
-                end if    
-            loop    
-        end if    
+        ' nop
     case else
         logentry("error", "unsupported locale " + locale + " applying default setting")
+        locale = "en"
 end select
+
+' get date info
+inifile = exepath + "\conf\" + locale + "\date.ini"
+if FileExists(inifile) = false then
+    logentry("error", inifile + " file does not excist")
+else 
+    f = readfromfile(inifile)
+    Do Until EOF(f)
+        Line Input #f, itm
+        if instr(1, itm, "=") > 1 then
+            inikey = trim(mid(itm, 1, instr(1, itm, "=") - 2))
+            inival = trim(mid(itm, instr(1, itm, "=") + 2, len(itm)))
+            select case inikey
+                case "m1"
+                    langenmonth(1) = inival
+                case "m2"
+                    langenmonth(2) = inival
+                case "m3"
+                    langenmonth(3) = inival
+                case "m4"
+                    langenmonth(4) = inival
+                case "m5"
+                    langenmonth(5) = inival
+                case "m6"
+                    langenmonth(6) = inival
+                case "m7"
+                    langenmonth(7) = inival
+                case "m8"
+                    langenmonth(8) = inival
+                case "m9"
+                    langenmonth(9) = inival
+                case "m10"
+                    langenmonth(10) = inival
+                case "m11"
+                    langenmonth(11) = inival
+                case "m12"
+                    langenmonth(12) = inival
+
+                case "d0"
+                    langenday(0) = inival
+                case "d1"
+                    langenday(1) = inival
+                case "d2"
+                    langenday(2) = inival
+                case "d3"
+                    langenday(3) = inival
+                case "d4"
+                    langenday(4) = inival
+                case "d5"
+                    langenday(5) = inival
+                case "d6"
+                    langenday(6) = inival
+            end select
+        end if    
+    loop
+    close(f)    
+end if    
 
 ' parse commandline
 select case command(1)
@@ -717,6 +697,7 @@ While glrunning
 
     ' enable shader
     glUseProgram(Shader.ProgramObject)
+    tNow = Timer()
 
     ' get uniforms locations in shader program
     var iGlobalTime = glGetUniformLocation(Shader.ProgramObject,"iGlobalTime")
@@ -733,8 +714,6 @@ While glrunning
 
     ' Update the screen
     SDL_GL_SwapWindow(glglass)
-    tStart = Timer()
-    tLast  = tStart
 
     SDL_SetWindowTitle(glass, "shadertoy sdl2 file: " & filename)
     ' reduce cpu usage affects shader animation
@@ -825,6 +804,7 @@ while running
         ' if image can not be loaded skip to next file
         if background_surface = null then
             getimage(filename, mp3file, mp3chk, playtype)
+            background_surface = IMG_LoadTexture(renderer, filename)
             dummy = filename
         end if
 
@@ -967,9 +947,8 @@ while running
         select case datedisplay
             case "full" 
                 ddatetime = langenday(fd.wDayOfWeek) & ", " & day(now) & " " + langenmonth(month(datetime)) & " " & year(datetime)
-            case "abbreviated"
+            case "short"
                 ddatetime = left(langenday(fd.wDayOfWeek), 3) + ", " & day(now) & " " + left(langenmonth(month(datetime)), 3) & " " & year(datetime)
-                'ddatetime = left(langenday(weekday(dateserial(year(now),month(now), 1), 0)), 3) + ", " & day(now) & " " + left(langenmonth(month(datetime)), 3) & " " & year(datetime)
             case "os"    
                 ddatetime = format(datetime, dateformat)
         end select

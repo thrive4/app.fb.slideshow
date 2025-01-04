@@ -183,6 +183,9 @@ else
 '            v3.y = screenheight * 0.35f
 '            v3.z = v3.x/v3.y
 end if
+' inital timing animation
+tStart = Timer()
+tLast  = tStart
 
 ' create opengl context bound to sdl
 Dim As SDL_GLContext glContext = SDL_GL_CreateContext(glglass)
