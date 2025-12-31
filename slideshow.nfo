@@ -1,6 +1,23 @@
+update 1.7 31/12/2025
+- major rewrite due to implementing new listplay
+  shuffleplay now superseded by listplay
+  better random shuffle plus has history that keeps
+  tab of previous random selected items
+- added support for webgl shaders using extension .gls
+- added .webp support needs extra dlls
+  libwebp-7 and libwebpdemux-2 x86 versions ...
+- update sdl2 from 2.30.9.0 to 2.32.4.0
+- update sdl_image from 2.8.2.0 to 2.8.8.0
+- update sdl_ttf from 2.22.0.0 to 2.24.0.0
+- update generic file functions added drive label and storage
+  and convertbytesize
+- harmonized help files and added switches
+- better locale handling
+- added spanish (es)
+
 update 1.6 04/01/2025
 - fixed reversed animations opengl was timing issue
-- improved locale handeling
+- improved locale handling
 
 update v1.5 19/11/2024
 - fix resolvepath handling of ..\<path>\<file>

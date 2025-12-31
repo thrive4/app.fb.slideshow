@@ -2,28 +2,63 @@
 ' Translated to FreeBASIC by Michael "h4tt3n" Schmidt Nissen, march 2017
 ' http://www.willusher.io/sdl2%20tutorials/2013/12/18/lesson-6-true-type-fonts-with-sdl_ttf
 ' tweaked for fb and sdl2 june 2023 by thrive4
-' supported formats .bmp, .gif, .gls, .jpg, .jpeg, .mp3, .png, .pcx
+' supported formats .bmp, .gif, .gls, .jpg, .jpeg, .mp3, .png, .pcx, .svg, .webp
 
 #include once "SDL2/SDL.bi"
 #include once "SDL2/SDL_ttf.bi"
 #include once "SDL2/SDL_image.bi"
 #include once "utilfile.bas"
-#include once "shuffleplay.bas"
+#include once "listplay.bas"
+#include once "utilaudio.bas"
 #cmdline "app.rc"
 
 ' setup screen and sdl
-dim event        as SDL_Event
-dim running      as boolean = true
-dim screenwidth  As integer = 1280
-dim screenheight As integer = 720
-dim fullscreen   as boolean = false
-dim fps          as ulong   = 30
-dim fpscurrent   as ulong
-dim desktopw     as integer
-dim desktoph     as integer
-dim desktopr     as integer
-dim rotateimage  as SDL_RendererFlip = SDL_FLIP_NONE
-dim rotateangle  as double = 0
+dim event           as SDL_Event
+dim running         as boolean = true
+dim screenwidth     As integer = 1280
+dim screenheight    As integer = 720
+dim fullscreen      as boolean = false
+dim fps             as ulong   = 30
+dim fpscurrent      as ulong
+dim desktopw        as integer
+dim desktoph        as integer
+dim desktopr        as integer
+dim locale          as string = "en"
+dim shared as string filename
+filename                       = ""
+Dim shared As SDL_Texture Ptr background_surface = 0
+Dim shared As SDL_Renderer Ptr renderer          = 0
+dim shared as SDL_RendererFlip rotateimage       = SDL_FLIP_NONE
+dim shared as double rotateangle                 = 0
+'zoomtype options stretch, scaled, zoomsmallimage
+dim shared as string zoomtype
+zoomtype = "zoomsmallimage"
+dim dummy           as string = ""
+dim shared mp3file  as string
+dim shared mp3chk   as boolean
+mp3chk = false
+
+' get desktop info
+ScreenInfo desktopw, desktoph,,,desktopr
+SDL_ShowCursor(SDL_DISABLE)
+
+' setup list of images for background
+dim fileext      as string = ""
+dim mediafolder  as string
+dim imagetypes   as string = ".bmp, .gif, .gls, .jpg, .jpeg, .mp3, .png, .pcx, .svg, .webp" 
+dim playtype     as string = "shuffle"
+dim currentitem  as integer
+dim maxitemslist as integer
+dim listtype     as string = "image"
+
+' setup timer used as interval between showing next image in microseconds
+dim inittime    as integer = 0
+dim interval    as integer = fps * 100 '3000
+dim currenttime as integer
+' setup timer used by effects
+dim fxinittime  as integer = 0
+dim menurefresh as integer = 25000
+
 ' surfaces needed for adding alpha
 ' sdl allocates memory per step SDL_SetSurfaceAlphaMod, SDL_ConvertSurfaceFormat
 ' using the same surface leads to a memeory leak.... 
@@ -45,25 +80,6 @@ dim pip          as sdl_rect
 
 ' get slideshow handle when launched
 dim slideshowapp as hwnd = GetForegroundWindow
-
-'zoomtype options stretch, scaled, zoomsmallimage
-dim zoomtype        as string = "zoomsmallimage"
-dim dummy           as string = ""
-dim shared mp3file  as string
-dim shared mp3chk   as boolean
-mp3chk = false
-
-' get desktop info
-ScreenInfo desktopw, desktoph,,,desktopr
-SDL_ShowCursor(SDL_DISABLE)
-
-' setup timer used as interval between showing next image in microseconds
-dim inittime    as integer = 0
-dim interval    as integer = fps * 100 '3000
-dim currenttime as integer
-' setup timer used by effects
-dim fxinittime  as integer = 0
-dim menurefresh as integer = 25000
 
 ' effects
 dim fade        as integer = 1
@@ -94,7 +110,6 @@ dim dateformat       as string = "dd/mm/yyyy"
 dim timeformat       as string = "hh:mm:ss"
 ' clockposistion options bottomleft, bottomright, topleft, topright 
 dim clockposistion   as string = "bottomleft"
-dim locale           as string = "en"
 ' options default, en, en-abrivated
 dim datedisplay      as string = "default"
 dim shared clockposx as integer
@@ -112,21 +127,14 @@ dim imagename as string
 ' imagenametype options file, fullpath, folder
 dim imagenametype as string = "folder"
 
-' setup list of images for background
-dim filename    as string
-dim fileext     as string = ""
-dim imagefolder as string
-dim imagetypes  as string = ".bmp, .gif, .gls, .jpg, .jpeg, .mp3, .png, .pcx" 
-dim playtype    as string = "shuffle"
-
 ' init app by overwrite by commandline or config file
-'ini overwrite
+' ini overwrite
 dim inifile as string = exepath + "\conf\" + "conf.ini"
 dim f       as long
 dim as string itm, inikey, inival
 
 ' setup the text aka texture and image with sdl
-Dim As SDL_Texture Ptr background_surface
+'Dim As SDL_Texture Ptr background_surface
 Dim As SDL_Texture Ptr temp_surface
 Dim As SDL_Texture Ptr texture
 SDL_SetTextureBlendMode(temp_surface, SDL_BLENDMODE_BLEND)
@@ -145,117 +153,68 @@ else
     f = readfromfile(inifile)
     Do Until EOF(f)
         Line Input #f, itm
-        if instr(1, itm, "=") > 1 then
+        if instr(1, itm, "=") > 1 and Left(itm, 1) <> "'" then
             inikey = trim(mid(itm, 1, instr(1, itm, "=") - 2))
             inival = trim(mid(itm, instr(1, itm, "=") + 2, len(itm)))
-            select case inikey
-                case "screenwidth"
-                    screenwidth = val(inival)
-                case "screenheight"
-                    screenheight = val(inival)
-                case "fullscreen"
-                    fullscreen = cbool(inival)
-                case "zoomtype"
-                    zoomtype = inival
-                case "interval"
-                    interval = val(inival)
-                case "ttffont"
-                    ttffont = exepath + "\" + inival
-                case "dateformat"
-                    dateformat = inival
-                case "datedisplay"
-                    datedisplay = inival
-                case "timeformat"
-                    timeformat = inival
-                case "clockposistion"
-                    clockposistion = inival
-                case "locale"
-                    locale = inival
-                case "imagenametype"
-                    imagenametype = inival
-                case "imagefolder"
-                    imagefolder = inival
-                case "playtype"
-                    playtype = inival
-                case "logtype"
-                    logtype = inival
-                case "usecons"
-                    usecons = inival
-            end select
+            if inival <> "" then
+                select case inikey
+                    case "screenwidth"
+                        screenwidth = val(inival)
+                    case "screenheight"
+                        screenheight = val(inival)
+                    case "fullscreen"
+                        fullscreen = cbool(inival)
+                        if fullscreen then
+                            screenwidth  = desktopw
+                            screenheight = desktoph
+                            fullscreen = true
+                        end if
+                    case "locale"
+                        locale = inival
+                    case "usecons"
+                        usecons = inival
+                    case "logtype"
+                        logtype = inival
+                    case "mediafolder"
+                        mediafolder = inival
+                    case "playtype"
+                        playtype = inival
+                    case "imagenametype"
+                        imagenametype = inival
+                    case "zoomtype"
+                        zoomtype = inival
+                    case "interval"
+                        interval = val(inival)
+                    case "ttffont"
+                        ttffont = exepath + "\" + inival
+                    case "dateformat"
+                        dateformat = inival
+                    case "datedisplay"
+                        datedisplay = inival
+                    case "timeformat"
+                        timeformat = inival
+                    case "clockposistion"
+                        clockposistion = inival
+                end select
+            end if    
             'print inikey + " - " + inival
         end if    
-    loop    
+    loop
+    close(f)    
 end if    
 
 ' verify locale otherwise set default
 select case locale
-    case "en", "de", "fr", "nl"
+    case "en", "es", "de", "fr", "nl"
         ' nop
     case else
         logentry("error", "unsupported locale " + locale + " applying default setting")
         locale = "en"
 end select
 
-' get date info
-inifile = exepath + "\conf\" + locale + "\date.ini"
-if FileExists(inifile) = false then
-    logentry("error", inifile + " file does not excist")
-else 
-    f = readfromfile(inifile)
-    Do Until EOF(f)
-        Line Input #f, itm
-        if instr(1, itm, "=") > 1 then
-            inikey = trim(mid(itm, 1, instr(1, itm, "=") - 2))
-            inival = trim(mid(itm, instr(1, itm, "=") + 2, len(itm)))
-            select case inikey
-                case "m1"
-                    langenmonth(1) = inival
-                case "m2"
-                    langenmonth(2) = inival
-                case "m3"
-                    langenmonth(3) = inival
-                case "m4"
-                    langenmonth(4) = inival
-                case "m5"
-                    langenmonth(5) = inival
-                case "m6"
-                    langenmonth(6) = inival
-                case "m7"
-                    langenmonth(7) = inival
-                case "m8"
-                    langenmonth(8) = inival
-                case "m9"
-                    langenmonth(9) = inival
-                case "m10"
-                    langenmonth(10) = inival
-                case "m11"
-                    langenmonth(11) = inival
-                case "m12"
-                    langenmonth(12) = inival
-
-                case "d0"
-                    langenday(0) = inival
-                case "d1"
-                    langenday(1) = inival
-                case "d2"
-                    langenday(2) = inival
-                case "d3"
-                    langenday(3) = inival
-                case "d4"
-                    langenday(4) = inival
-                case "d5"
-                    langenday(5) = inival
-                case "d6"
-                    langenday(6) = inival
-            end select
-        end if    
-    loop
-    close(f)    
-end if    
-
 ' parse commandline
-select case command(1)
-    case "/?", "-h", "-help", "-man"
+select case lcase(command(1))
+    case "/?", "-h", "-help", "--help", "-man"
         displayhelp(locale)
         goto cleanup
     case "-v", "-ver"
@@ -263,51 +222,46 @@ select case command(1)
         goto cleanup
 end select
 
+' get media
 dummy = resolvepath(command(1))
-if instr(dummy, ".") <> 0 and instr(dummy, "..") = 0 and instr(dummy, ".m3u") = 0 then
-    fileext = lcase(mid(dummy, instrrev(dummy, ".")))
-    if instr(1, imagetypes, fileext) = 0 then
-        logentry("fatal", dummy + " file type not supported")
-    end if
-    imagefolder = left(dummy, instrrev(dummy, "\") - 1)
-    chk = createlist(imagefolder, imagetypes, "slideshow")
-    currentimage = setcurrentlistitem("slideshow", dummy)
-    'currentimage -= 1
-else
-    ' specific path
-    if instr(dummy, "\") <> 0 and instr(dummy, ".m3u") = 0  then
-        imagefolder = dummy
-        if checkpath(imagefolder) = false then
-            logentry("fatal",  "error: path not found " + imagefolder)
-        else
-            chk = createlist(imagefolder, imagetypes, "slideshow")
-            if chk = false then
+if instr(dummy, ".m3u") = 0 and instr(dummy, ".pls") = 0 and instr(dummy, "http") = 0 then
+    if instr(dummy, ".") <> 0 and instr(dummy, "..") = 0 then
+        fileext = lcase(mid(dummy, instrrev(dummy, ".")))
+        if instr(1, imagetypes, fileext) = 0 then
+            logentry("fatal", dummy + " file type not supported")
+        end if
+        mediafolder = left(dummy, instrrev(dummy, "\") - 1)
+        createlist(mediafolder, imagetypes, listtype)
+    else
+        ' specific path
+        if instr(dummy, "\") <> 0 and instr(dummy, ".m3u") = 0  then
+            mediafolder = dummy
+            if checkpath(mediafolder) = false then
+                logentry("fatal",  "error: path not found " + mediafolder)
+            else            
+                if createlist(mediafolder, imagetypes, listtype) = 0 then
+                    logentry("fatal", "error: no displayable files found")
+                end if
+            end if
+        ELSE
+            ' fall back to path imagefolder specified in conf.ini
+            if checkpath(mediafolder) = false then
+                logentry("warning", "error: path not found " + mediafolder)
+                ' try scanning exe path
+                mediafolder = exepath
+            end if
+            if createlist(mediafolder, imagetypes, listtype) = 0 then
                 logentry("fatal", "error: no displayable files found")
             end if
-            filename = listplay(playtype, "slideshow")
         end if
-    ELSE
-        ' fall back to path imagefolder specified in conf.ini
-        if checkpath(imagefolder) = false then
-            logentry("warning", "error: path not found " + imagefolder)
-            ' try scanning exe path
-            imagefolder = exepath
-        end if
-        chk = createlist(imagefolder, imagetypes, "slideshow")
-        if chk = false then
-            logentry("fatal", "error: no displayable files found")
-        end if
-        filename = listplay(playtype, "slideshow")
     end if
 end if
+
 if command(2) = "fullscreen" or command(4) = "fullscreen" then
     screenwidth  = desktopw
     screenheight = desktoph
     fullscreen = true
 end if 
-
-' setup parsing pls and m3u
-dim maxitems        as integer
 
 ' use .m3u as slideshow coverart mp3s
 if instr(dummy, ".m3u") <> 0 then
@@ -316,8 +270,7 @@ if instr(dummy, ".m3u") <> 0 then
     else
         logentry("fatal", dummy + " file does not excist or possibly use full path to file")
     end if
-    maxitems = getmp3playlist(dummy, "slideshow")
-    filename = listplay(playtype, "slideshow")
+    listnr = getmp3playlist(dummy, listtype)
     logentry("notice", "parsing and playing playlist " + filename)
 end if
 
@@ -330,18 +283,14 @@ if instr(dummy, ":") <> 0 and len(command(2)) <> 0 and command(2) <> "fullscreen
         case "year"
         case "genre"
         case else
-            delfile(exepath + "\" + "slideshow" + ".tmp")
-            delfile(exepath + "\" + "slideshow" + ".lst")
-            delfile(exepath + "\" + "slideshow" + ".swp")
             logentry("fatal", "unknown tag '" & command(2) & "' valid tags artist, title, album, genre and year")
     end select
     ' scan and search nr results overwritten by getmp3playlist
-    maxitems = exportm3u(dummy, "*.mp3", "m3u", "exif", command(2), command(3))
-    maxitems = getmp3playlist(exepath + "\" + command(3) + ".m3u", "slideshow")
-    filename = listplay(playtype, "slideshow")
-    currentsong = setcurrentlistitem("slideshow", filename)
-    if currentsong = 1 then
+    listnr = exportm3u(dummy, "*.mp3", "m3u", "exif", command(2), command(3))
+    if listnr < 2 then
         logentry("fatal", "no matches found for " + command(3) + " in " + command(2))
+    else
+        listnr = getmp3playlist(exepath + "\" + command(3) + ".m3u", listtype)
     end if
 end if
 dummy = ""
@@ -362,16 +311,88 @@ sub checkmp3cover(byref filename as string)
     end if
 end sub
 
+
+' toggle main loop to opengl shader if .gls file
+#include once "shadertoy.bas"
+dim shared as boolean glrunning = false
+
 ' get next or previous image
-sub getimage(byref filename as string, byref dummy as string, byref mp3chk as boolean, byval playtype as string)
-    filename = listplay(playtype, "slideshow")
-    checkmp3cover(filename)
-    ' validate if false get next image
-    if filename = "" or FileExists(filename) = false then
-        filename = listplay(playtype, "slideshow")
+sub playmedia(byval index as integer)
+    dim as string entry = listrec.listfile(index)
+
+    filename = entry
+    if glrunning = false then
         checkmp3cover(filename)
+        ' validate if false get next image
+        if filename = "" or FileExists(filename) = false then
+            filename = listrec.listfile(index + 1)
+            checkmp3cover(filename)
+        end if
+        SDL_DestroyTexture(background_surface)
+        background_surface = IMG_LoadTexture(renderer, filename)
+        ' reset rotation
+        rotateangle = 0
+        zoomtype = "zoomsmallimage"
     end if
 end sub
+
+' get date info
+inifile = exepath + "\conf\" + locale + "\date.ini"
+if FileExists(inifile) = false then
+    logentry("error", inifile + " file does not excist")
+else 
+    f = readfromfile(inifile)
+    Do Until EOF(f)
+        Line Input #f, itm
+        if instr(1, itm, "=") > 1 then
+            inikey = trim(mid(itm, 1, instr(1, itm, "=") - 2))
+            inival = trim(mid(itm, instr(1, itm, "=") + 2, len(itm)))
+            if inival <> "" then
+                select case inikey
+                    case "m1"
+                        langenmonth(1) = inival
+                    case "m2"
+                        langenmonth(2) = inival
+                    case "m3"
+                        langenmonth(3) = inival
+                    case "m4"
+                        langenmonth(4) = inival
+                    case "m5"
+                        langenmonth(5) = inival
+                    case "m6"
+                        langenmonth(6) = inival
+                    case "m7"
+                        langenmonth(7) = inival
+                    case "m8"
+                        langenmonth(8) = inival
+                    case "m9"
+                        langenmonth(9) = inival
+                    case "m10"
+                        langenmonth(10) = inival
+                    case "m11"
+                        langenmonth(11) = inival
+                    case "m12"
+                        langenmonth(12) = inival
+                    case "d0"
+                        langenday(0) = inival
+                    case "d1"
+                        langenday(1) = inival
+                    case "d2"
+                        langenday(2) = inival
+                    case "d3"
+                        langenday(3) = inival
+                    case "d4"
+                        langenday(4) = inival
+                    case "d5"
+                        langenday(5) = inival
+                    case "d6"
+                        langenday(6) = inival
+                end select
+            end if
+        end if    
+    loop
+    close(f)    
+end if    
 
 ' via https://www.freebasic.net/forum/viewtopic.php?t=32323 by fxm
 Function syncfps(ByVal MyFps As Ulong, ByVal SkipImage As Boolean = True, ByVal Restart As Boolean = False, ByRef ImageSkipped As Boolean = False) As Ulong
@@ -548,19 +569,6 @@ function closesdlfonts() as boolean
     return true
 end function
 
-' toggle main loop to opengl shader if .gls file
-#include once "shadertoy.bas"
-dim glrunning as boolean = false
-if instr(1, filename, ".gls") > 0 then
-    running      = false
-    glrunning    = true
-    glfullscreen = true
-    shader.CompileFile(filename)
-else
-    SDL_GL_DeleteContext(glContext)
-    SDL_DestroyWindow(glglass)
-end if
-
 ' init window and render
 SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1")
 ' respond to power plan settings blank display on windows set hint before sdl init video
@@ -588,6 +596,35 @@ if (TTF_Init() = Not 0) Then
     end 
 EndIf
 
+' set active media item
+if instr(command(1), ".") > 0 and instr(command(1), ".m3u") = 0 and instr(command(1), ".pls") = 0 then
+    currentitem = getcurrentlistitem(listtype, command(1))
+    ' todo tricky hack due to timer inittime
+    if instr(command(1), ".gls") = 0 then
+        currentitem = currentitem - 1
+    end if
+else
+    currentitem = listnext(listtype, playtype, 0)
+end if
+maxitemslist = getmaxitemslist(listtype)
+setsequence(currentitem)
+if lcase(playtype) = "linear" then
+    clearseq(listtype)
+end if
+
+' play first item
+playmedia(currentitem)
+
+if instr(1, filename, ".gls") > 0 then
+    running      = false
+    glrunning    = true
+    glfullscreen = true
+    shader.CompileFile(filename)
+else
+    SDL_GL_DeleteContext(glContext)
+    SDL_DestroyWindow(glglass)
+end if
+
 initsdl:
 desktopplate.x = 0
 desktopplate.y = 0
@@ -614,7 +651,7 @@ if (glass = NULL) Then
 	SDL_Quit()
     logentry("fatal", "abnormal termination sdl2 could not create window")
 EndIf
-Dim As SDL_Renderer Ptr renderer = SDL_CreateRenderer(glass, -1, SDL_RENDERER_ACCELERATED Or SDL_RENDERER_PRESENTVSYNC)
+renderer = SDL_CreateRenderer(glass, -1, SDL_RENDERER_ACCELERATED Or SDL_RENDERER_PRESENTVSYNC)
 'SDL_SetWindowOpacity(glass, 0.5)
 if (renderer = NULL) Then	
 	SDL_Quit()
@@ -633,12 +670,45 @@ SDL_RenderClear(renderer)
 SDL_RenderPresent(renderer)
 sdl_delay(400)
 
+' work around to init first image regular sdl
+if glrunning = false then
+    SDL_DestroyTexture(background_surface)
+    background_surface = IMG_LoadTexture(renderer, filename)
+    ' verify load image
+    if ( background_surface = NULL ) Then
+        'cleanup(background, image, renderer, window)
+        IMG_Quit()
+        SDL_Quit()
+        logentry("fatal", "abnormal termination sdl2 could not create texture")
+    End If
+
+    ' tricky todo check this used to show first image without delay in slideshow
+    inittime = SDL_GetTicks() - interval
+    ' todo check placement screen
+    select case clockposistion
+        case "bottomleft" 
+            ' display clock in bottom corner left
+            clockposx = 30
+            clockposy = screenheight - fontsizeclock * 3.5f
+        case "bottomright" 
+            ' display clock in bottom corner right
+            clockposx = screenwidth  - fontsizeclock * 6.0f
+            clockposy = screenheight - fontsizeclock * 3.5f
+        case "topleft" 
+            ' display clock in top corner left
+            clockposx = fontsizeclock
+            clockposy = fontsizeclock
+        case "topright" 
+            ' display clock in top corner right
+            clockposx = screenwidth  - fontsizeclock * 6.0f
+            clockposy = fontsizeclock
+    end select
+end if ' end glrunning false
+
 ' main shadertoy sdl
 While glrunning
-
     ' make sure gl window is on top
     SDL_RaiseWindow(glglass)
-
     While SDL_PollEvent(@event)
         select case event.type
             case SDL_KEYDOWN and event.key.keysym.sym = SDLK_ESCAPE
@@ -686,8 +756,13 @@ While glrunning
 
     ' timer
     currenttime = SDL_GetTicks()
-    if (currenttime > inittime + interval * 3) then
-        filename = listplay(playtype, "slideshow")
+    if (currenttime > inittime + interval * 2) then
+        ' get next image in folder if avaiable
+        currentitem = listnext(listtype, playtype, currentitem)
+        if playtype = "shuffle" then
+            setsequence(currentitem)
+        end if
+        playmedia(currentitem)
         ' todo needs better handeling funky behaivour
         if shader.CompileFile(filename) = false then
             print "error compiling " & filename
@@ -723,36 +798,7 @@ While glrunning
     sleep fpscurrent * 0.35f
 Wend
 
-' work around to init first image regular sdl
-if glrunning = false then
-    getimage(filename, mp3file, mp3chk, playtype)
-    SDL_DestroyTexture(background_surface)
-    background_surface = IMG_LoadTexture(renderer, filename)
-
-    ' tricky todo check this used to show first image without delay in slideshow
-    inittime = SDL_GetTicks() - interval
-    ' todo check placement screen
-    select case clockposistion
-        case "bottomleft" 
-            ' display clock in bottom corner left
-            clockposx = 30
-            clockposy = screenheight - fontsizeclock * 3.5f
-        case "bottomright" 
-            ' display clock in bottom corner right
-            clockposx = screenwidth  - fontsizeclock * 6.0f
-            clockposy = screenheight - fontsizeclock * 3.5f
-        case "topleft" 
-            ' display clock in top corner left
-            clockposx = fontsizeclock
-            clockposy = fontsizeclock
-        case "topright" 
-            ' display clock in top corner right
-            clockposx = screenwidth  - fontsizeclock * 6.0f
-            clockposy = fontsizeclock
-    end select
-end if ' end glrunning false
-
-' main regular sdl
+' main
 while running
     datetime = Now()
 
@@ -798,13 +844,19 @@ while running
         pip.h = slideshow.h
         SDL_DestroyTexture(temp_surface)
         SDL_DestroyTexture(background_surface)
-
-        getimage(filename, mp3file, mp3chk, playtype)
-        background_surface = IMG_LoadTexture(renderer, filename)
+            ' get next image in folder if avaiable
+            currentitem = listnext(listtype, playtype, currentitem)
+            if playtype = "shuffle" then
+                setsequence(currentitem)
+            end if
+            playmedia(currentitem)
         ' if image can not be loaded skip to next file
         if background_surface = null then
-            getimage(filename, mp3file, mp3chk, playtype)
-            background_surface = IMG_LoadTexture(renderer, filename)
+            currentitem = listnext(listtype, playtype, currentitem)
+            if playtype = "shuffle" then
+                setsequence(currentitem)
+            end if
+            playmedia(currentitem)
             dummy = filename
         end if
 
@@ -947,6 +999,7 @@ while running
         select case datedisplay
             case "full" 
                 ddatetime = langenday(fd.wDayOfWeek) & ", " & day(now) & " " + langenmonth(month(datetime)) & " " & year(datetime)
+            ' todo issue with french, german and spanish abbreviations
             case "short"
                 ddatetime = left(langenday(fd.wDayOfWeek), 3) + ", " & day(now) & " " + left(langenmonth(month(datetime)), 3) & " " & year(datetime)
             case "os"    
@@ -976,7 +1029,7 @@ while running
         renderTexture(texture, renderer, clockposx, clockposy + fontsizeclock + fontsizedate, 0, null, SDL_FLIP_NONE)
     SDL_RenderPresent(renderer)
 
-    ' use sdl_delay to keep cpu usage low around 80 for ~10%
+    ' sync fps and decrease cpu usage
     fpscurrent = syncfps(fps)
     ' todo phase out funky trick to achieve desired animation duration
     sleep fpscurrent * 0.35f
@@ -990,8 +1043,6 @@ while running
             SDL_SetWindowTitle(glass, "slideshow - " + filename + " - " & fpscurrent & " fps")' / refresh monitor = " & desktopr)
         end if
     end if
-    
-
 wend
 
 'cleanup sdl
@@ -999,16 +1050,14 @@ SDL_DestroyTexture(texture)
 SDL_DestroyTexture(background_surface)
 SDL_DestroyRenderer(renderer)
 SDL_DestroyWindow(glass)
+SDL_GL_DeleteContext(glContext)
+SDL_DestroyWindow(glglass)
 TTF_Quit()
 SDL_Quit()
 IMG_Quit()
 close
 
 cleanup:
-' cleanup listplay files
-delfile(exepath + "\" + "slideshow" + ".tmp")
-delfile(exepath + "\" + "slideshow" + ".lst")
-delfile(exepath + "\" + "slideshow" + ".swp")
 delfile(exepath + "\thumb.jpg")
 delfile(exepath + "\thumb.png")
 
