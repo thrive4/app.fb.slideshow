@@ -1,3 +1,8 @@
+note: 2026 august **merged** slideshow repo with imageviewer\
+https://github.com/thrive4/app.fb.imageviewer
+
+Further updates here are discontinued.
+
 ## slideshow [![Github All Releases](https://img.shields.io/github/downloads/thrive4/app.fb.slideshow/total.svg)]()
 basic slideshow written in freebasic and sdl2\
 supported file types or extensions:\
